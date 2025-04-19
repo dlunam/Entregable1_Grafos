@@ -22,3 +22,4 @@ def analizar_geojson(nombre_archivo):
 # Ejecutar análisis sobre los dos archivos
 analizar_geojson("M4_Estaciones.geojson")
 analizar_geojson("M4_Tramos.geojson")
+analizar_geojson("M4_ParadasPorItinerario.geojson")
