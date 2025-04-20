@@ -1,4 +1,5 @@
 import geopandas as gpd
+import re
 
 # Archivos originales
 ruta_estaciones = "M4_Estaciones.geojson"
@@ -14,6 +15,16 @@ paradas = gpd.read_file(ruta_paradas)
 estaciones_filtrado = estaciones[['CODIGOESTACION', 'DENOMINACION', 'LINEAS', 'geometry']].copy()
 tramos_filtrado = tramos[['CODIGOITINERARIO', 'CODIGOESTACION', 'NUMEROORDEN', 'LONGITUDTRAMOANTERIOR', 'NUMEROLINEAUSUARIO', 'geometry']].copy()
 paradas_filtrado = paradas[['CODIGOESTACION', 'NUMEROLINEAUSUARIO', 'NUMEROORDEN', 'geometry']].copy()
+
+# Modificar NUMEROLINEAUSUARIO para dejar solo el número inicial
+def extraer_numero_inicial(valor):
+    valor_str = str(valor)
+    coincidencia = re.match(r'^(\d+)', valor_str)
+    if coincidencia:
+        return coincidencia.group(1)
+    return valor_str
+
+tramos_filtrado['NUMEROLINEAUSUARIO'] = tramos_filtrado['NUMEROLINEAUSUARIO'].apply(extraer_numero_inicial)
 
 # Guardar como nuevos archivos GeoJSON
 estaciones_filtrado.to_file("Estaciones_filtrado.geojson", driver='GeoJSON')
