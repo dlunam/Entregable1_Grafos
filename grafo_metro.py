@@ -50,6 +50,25 @@ for origen in noviciado_codigos:
         if G.has_node(origen) and G.has_node(destino):
             G.add_edge(origen, destino, transbordo=True)
 
+# Añadir Ramal entre ÓPERA y PRÍNCIPE PÍO solo entre nodos que no tengan conexiones reales (solo transbordos)
+# Obtener códigos de estación de Ópera y Príncipe Pío
+opera_codigos = nombre_a_codigos.get("OPERA", [])
+principe_pio_codigos = nombre_a_codigos.get("PRINCIPE PIO", [])
+
+# Función auxiliar: devuelve True si el nodo solo está conectado por transbordos
+def solo_transbordos(nodo):
+    return all(G[nodo][vecino].get('transbordo') for vecino in G.neighbors(nodo))
+
+# Filtrar los nodos que solo tienen transbordos
+opera_sin_conexiones_reales = [n for n in opera_codigos if solo_transbordos(n)]
+ppio_sin_conexiones_reales = [n for n in principe_pio_codigos if solo_transbordos(n)]
+
+# Conectar el Ramal como una arista normal entre esos nodos
+for o in opera_sin_conexiones_reales:
+    for p in ppio_sin_conexiones_reales:
+        G.add_edge(o, p, transbordo=False)
+
+
 # Preparar posiciones a partir de coordenadas
 pos = {
     node: (data['geometry'].x, data['geometry'].y)
