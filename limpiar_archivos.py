@@ -12,7 +12,7 @@ paradas = gpd.read_file(ruta_paradas)
 
 # Filtrar columnas necesarias de cada archivo
 estaciones_filtrado = estaciones[['CODIGOESTACION', 'DENOMINACION', 'LINEAS', 'geometry']].copy()
-tramos_filtrado = tramos[['CODIGOITINERARIO', 'CODIGOESTACION', 'NUMEROORDEN', 'LONGITUDTRAMOANTERIOR', 'geometry']].copy()
+tramos_filtrado = tramos[['CODIGOITINERARIO', 'CODIGOESTACION', 'NUMEROORDEN', 'LONGITUDTRAMOANTERIOR', 'NUMEROLINEAUSUARIO', 'geometry']].copy()
 paradas_filtrado = paradas[['CODIGOESTACION', 'NUMEROLINEAUSUARIO', 'NUMEROORDEN', 'geometry']].copy()
 
 # Guardar como nuevos archivos GeoJSON
