@@ -1,105 +1,92 @@
 import geopandas as gpd
 import networkx as nx
 import matplotlib.pyplot as plt
+from itertools import combinations
 
-# Leer archivos filtrados
-estaciones = gpd.read_file("Estaciones_filtrado.geojson")
-tramos = gpd.read_file("Tramos_filtrado.geojson")
+def cargar_datos():
+    estaciones = gpd.read_file("Estaciones_filtrado.geojson")
+    tramos = gpd.read_file("Tramos_filtrado.geojson")
+    return estaciones, tramos
 
-# Crear grafo vacío no dirigido
-G = nx.Graph()
+def crear_grafo(estaciones):
+    G = nx.Graph()
+    for _, row in estaciones.iterrows():
+        G.add_node(
+            row['CODIGOESTACION'],
+            nombre=row['DENOMINACION'],
+            geometry=row['geometry']
+        )
+    return G
 
-# Añadir nodos con atributos (nombre, líneas, geometría)
-for _, row in estaciones.iterrows():
-    codigo = row['CODIGOESTACION']
-    G.add_node(
-        codigo,
-        nombre=row['DENOMINACION'],
-        lineas=row['LINEAS'],
-        geometry=row['geometry']
-    )
+def agregar_tramos(G, tramos):
+    tramos_sorted = tramos.sort_values(['CODIGOITINERARIO', 'NUMEROORDEN'])
+    for _, grupo in tramos_sorted.groupby('CODIGOITINERARIO'):
+        codigos = grupo['CODIGOESTACION'].tolist()
+        edges = zip(codigos, codigos[1:])
+        for origen, destino in edges:
+            if G.has_node(origen) and G.has_node(destino):
+                G.add_edge(origen, destino, transbordo=False)
 
-# Añadir aristas basadas en itinerarios y orden
-tramos_sorted = tramos.sort_values(['CODIGOITINERARIO', 'NUMEROORDEN'])
-grupos = tramos_sorted.groupby('CODIGOITINERARIO')
+def agregar_transbordos(G, estaciones):
+    nombre_a_codigos = estaciones.groupby('DENOMINACION')['CODIGOESTACION'].apply(list)
+    for codigos in nombre_a_codigos:
+        for origen, destino in combinations(codigos, 2):
+            if G.has_node(origen) and G.has_node(destino):
+                G.add_edge(origen, destino, transbordo=True)
+    return nombre_a_codigos
 
-for _, grupo in grupos:
-    codigos = grupo['CODIGOESTACION'].tolist()
-    for i in range(len(codigos) - 1):
-        origen = codigos[i]
-        destino = codigos[i+1]
-        if G.has_node(origen) and G.has_node(destino):
-            G.add_edge(origen, destino, transbordo=False)
+def agregar_transbordo_manual(G, nombre_a_codigos, origen_nom, destino_nom):
+    for origen in nombre_a_codigos.get(origen_nom.upper(), []):
+        for destino in nombre_a_codigos.get(destino_nom.upper(), []):
+            if G.has_node(origen) and G.has_node(destino):
+                G.add_edge(origen, destino, transbordo=True)
 
-# Añadir aristas de transbordo entre estaciones con el mismo nombre
-nombre_a_codigos = estaciones.groupby('DENOMINACION')['CODIGOESTACION'].apply(list)
+def agregar_ramal(G, nombre_a_codigos, origen_nom, destino_nom):
+    def solo_transbordos(nodo):
+        return all(G[nodo][vecino].get('transbordo') for vecino in G.neighbors(nodo))
+    
+    origenes = [n for n in nombre_a_codigos.get(origen_nom.upper(), []) if solo_transbordos(n)]
+    destinos = [n for n in nombre_a_codigos.get(destino_nom.upper(), []) if solo_transbordos(n)]
+    
+    for o in origenes:
+        for d in destinos:
+            G.add_edge(o, d, transbordo=False)
 
-for codigos in nombre_a_codigos:
-    if len(codigos) > 1:
-        for i in range(len(codigos)):
-            for j in range(i + 1, len(codigos)):
-                if G.has_node(codigos[i]) and G.has_node(codigos[j]):
-                    G.add_edge(codigos[i], codigos[j], transbordo=True)
+def obtener_posiciones(G):
+    return {n: (d['geometry'].x, d['geometry'].y) for n, d in G.nodes(data=True)}
 
-# Añadir transbordo manual entre Noviciado y Plaza de España
-noviciado_codigos = nombre_a_codigos.get("NOVICIADO", [])
-plaza_espana_codigos = nombre_a_codigos.get("PLAZA DE ESPAÑA", [])
+def dibujar_grafo(G, pos):
+    plt.figure(figsize=(15, 12))
+    
+    # Aristas
+    normales = [(u, v) for u, v, d in G.edges(data=True) if not d.get('transbordo')]
+    transbordos = [(u, v) for u, v, d in G.edges(data=True) if d.get('transbordo')]
+    
+    nx.draw_networkx_edges(G, pos, edgelist=normales, edge_color='gray', alpha=0.5)
+    nx.draw_networkx_edges(G, pos, edgelist=transbordos, edge_color='black', style='dashed', alpha=0.6)
+    
+    # Nodos y etiquetas
+    nx.draw_networkx_nodes(G, pos, node_size=50, node_color='blue')
+    labels = {n: d['nombre'] for n, d in G.nodes(data=True)}
+    nx.draw_networkx_labels(G, pos, labels, font_size=6, font_family="sans-serif")
+    
+    # Leyenda
+    plt.scatter([], [], c='blue', label='Estaciones')
+    plt.plot([], [], color='gray', label='Conexiones entre estaciones')
+    plt.plot([], [], color='black', linestyle='dashed', label='Transbordos')
+    plt.legend(loc='upper right')
 
-for origen in noviciado_codigos:
-    for destino in plaza_espana_codigos:
-        if G.has_node(origen) and G.has_node(destino):
-            G.add_edge(origen, destino, transbordo=True)
+    plt.title("Mapa del Metro de Madrid (Grafo de estaciones y tramos)", fontsize=14)
+    plt.axis('off')
+    plt.tight_layout()
+    plt.show()
 
-# Añadir Ramal entre ÓPERA y PRÍNCIPE PÍO solo entre nodos que no tengan conexiones reales (solo transbordos)
-# Obtener códigos de estación de Ópera y Príncipe Pío
-opera_codigos = nombre_a_codigos.get("OPERA", [])
-principe_pio_codigos = nombre_a_codigos.get("PRINCIPE PIO", [])
-
-# Función auxiliar: devuelve True si el nodo solo está conectado por transbordos
-def solo_transbordos(nodo):
-    return all(G[nodo][vecino].get('transbordo') for vecino in G.neighbors(nodo))
-
-# Filtrar los nodos que solo tienen transbordos
-opera_sin_conexiones_reales = [n for n in opera_codigos if solo_transbordos(n)]
-ppio_sin_conexiones_reales = [n for n in principe_pio_codigos if solo_transbordos(n)]
-
-# Conectar el Ramal como una arista normal entre esos nodos
-for o in opera_sin_conexiones_reales:
-    for p in ppio_sin_conexiones_reales:
-        G.add_edge(o, p, transbordo=False)
-
-
-# Preparar posiciones a partir de coordenadas
-pos = {
-    node: (data['geometry'].x, data['geometry'].y)
-    for node, data in G.nodes(data=True)
-}
-
-# Dibujar grafo
-plt.figure(figsize=(15, 12))
-
-# Aristas normales
-normal_edges = [(u, v) for u, v, d in G.edges(data=True) if not d.get('transbordo')]
-nx.draw_networkx_edges(G, pos, edgelist=normal_edges, edge_color='gray', alpha=0.5)
-
-# Aristas de transbordo (discontinuas en negro)
-transbordo_edges = [(u, v) for u, v, d in G.edges(data=True) if d.get('transbordo')]
-nx.draw_networkx_edges(G, pos, edgelist=transbordo_edges, edge_color='black', style='dashed', alpha=0.6)
-
-# Nodos (estaciones)
-nx.draw_networkx_nodes(G, pos, node_size=50, node_color='blue')
-
-# Etiquetas (nombres de estaciones)
-labels = {node: data['nombre'] for node, data in G.nodes(data=True)}
-nx.draw_networkx_labels(G, pos, labels, font_size=6, font_family="sans-serif")
-
-# Leyenda manual (única entrada para estaciones)
-plt.scatter([], [], c='blue', label='Estaciones')
-plt.plot([], [], color='gray', label='Conexiones entre estaciones')
-plt.plot([], [], color='black', linestyle='dashed', label='Transbordos')
-plt.legend(loc='upper right')
-
-plt.title("Mapa del Metro de Madrid (Grafo de estaciones y tramos)", fontsize=14)
-plt.axis('off')
-plt.tight_layout()
-plt.show()
+# === Main ===
+estaciones, tramos = cargar_datos()
+G = crear_grafo(estaciones)
+agregar_tramos(G, tramos)
+nombre_a_codigos = agregar_transbordos(G, estaciones)
+agregar_transbordo_manual(G, nombre_a_codigos, "NOVICIADO", "PLAZA DE ESPAÑA")
+agregar_ramal(G, nombre_a_codigos, "OPERA", "PRINCIPE PIO")
+pos = obtener_posiciones(G)
+dibujar_grafo(G, pos)
