@@ -44,6 +44,7 @@ def analizar_geojson(nombre_archivo):
 
 # Ejecutar análisis sobre todos los archivos
 analizar_csv("stop_times.txt")
+analizar_csv("tiempos_entre_estaciones.csv")
 analizar_geojson("M4_Estaciones.geojson")
 analizar_geojson("M4_Tramos.geojson")
 
