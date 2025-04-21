@@ -1,4 +1,5 @@
 import geopandas as gpd
+import pandas as pd
 import networkx as nx
 import matplotlib.pyplot as plt
 from itertools import combinations
@@ -35,11 +36,18 @@ def cargar_datos():
     tramos = gpd.read_file("Tramos_filtrado.geojson")
     return estaciones, tramos
 
+def cargar_tiempos():
+    df = pd.read_csv("tiempos_entre_estaciones.csv")
+    # Asegurar que los IDs sean string para comparación segura
+    df['stop_id'] = df['stop_id'].astype(str)
+    df['siguiente_stop_id'] = df['siguiente_stop_id'].astype(str)
+    return df
+
 def crear_grafo(estaciones):
     G = nx.Graph()
     for _, row in estaciones.iterrows():
         G.add_node(
-            row['CODIGOESTACION'],
+            str(row['CODIGOESTACION']),
             nombre=row['DENOMINACION'],
             geometry=row['geometry']
         )
@@ -48,33 +56,42 @@ def crear_grafo(estaciones):
 def agregar_tramos(G, tramos):
     tramos_sorted = tramos.sort_values(['CODIGOITINERARIO', 'NUMEROORDEN'])
     for _, grupo in tramos_sorted.groupby('CODIGOITINERARIO'):
-        codigos = grupo['CODIGOESTACION'].tolist()
-        lineas = grupo['NUMEROLINEAUSUARIO'].tolist()
+        codigos = grupo['CODIGOESTACION'].astype(str).tolist()
+        lineas = grupo['NUMEROLINEAUSUARIO'].astype(str).tolist()
         for i in range(len(codigos) - 1):
             origen, destino = codigos[i], codigos[i + 1]
-            linea = str(lineas[i])
-            color = linea_colores.get(f'L{linea}', 'gray')
+            linea = f'L{lineas[i]}'
+            color = linea_colores.get(linea, 'gray')
             if G.has_node(origen) and G.has_node(destino):
                 G.add_edge(
                     origen, destino,
                     transbordo=False,
-                    linea=f'L{linea}',
-                    color=color
+                    linea=linea,
+                    color=color,
+                    weight=None  # se asignará después
                 )
 
-def agregar_transbordos(G, estaciones):
-    nombre_a_codigos = estaciones.groupby('DENOMINACION')['CODIGOESTACION'].apply(list)
+def agregar_tiempos(G, tiempos_df):
+    for _, row in tiempos_df.iterrows():
+        origen = str(row['stop_id'])
+        destino = str(row['siguiente_stop_id'])
+        tiempo = row['tiempo_entre_estaciones']
+        if G.has_edge(origen, destino):
+            G[origen][destino]['weight'] = tiempo
+
+def agregar_transbordos(G, estaciones, peso_transbordo=5):
+    nombre_a_codigos = estaciones.groupby('DENOMINACION')['CODIGOESTACION'].apply(lambda x: list(map(str, x)))
     for codigos in nombre_a_codigos:
         for origen, destino in combinations(codigos, 2):
             if G.has_node(origen) and G.has_node(destino):
-                G.add_edge(origen, destino, transbordo=True)
+                G.add_edge(origen, destino, transbordo=True, weight=peso_transbordo)
     return nombre_a_codigos
 
-def agregar_transbordo_manual(G, nombre_a_codigos, origen_nom, destino_nom):
+def agregar_transbordo_manual(G, nombre_a_codigos, origen_nom, destino_nom, peso_transbordo=5):
     for origen in nombre_a_codigos.get(origen_nom.upper(), []):
         for destino in nombre_a_codigos.get(destino_nom.upper(), []):
             if G.has_node(origen) and G.has_node(destino):
-                G.add_edge(origen, destino, transbordo=True)
+                G.add_edge(origen, destino, transbordo=True, weight=peso_transbordo)
 
 def agregar_ramal(G, nombre_a_codigos, origen_nom, destino_nom):
     def solo_transbordos(nodo):
@@ -85,7 +102,7 @@ def agregar_ramal(G, nombre_a_codigos, origen_nom, destino_nom):
     
     for o in origenes:
         for d in destinos:
-            G.add_edge(o, d, transbordo=False, linea='R', color=linea_colores['R'])
+            G.add_edge(o, d, transbordo=False, linea='R', color=linea_colores['R'], weight=2)  # peso aproximado
 
 def obtener_posiciones(G):
     return {n: (d['geometry'].x, d['geometry'].y) for n, d in G.nodes(data=True)}
@@ -124,7 +141,6 @@ def dibujar_grafo(G, pos):
     labels = {n: d['nombre'] for n, d in G.nodes(data=True)}
     nx.draw_networkx_labels(G, pos, labels, font_size=6)
 
-    # Leyenda
     plt.scatter([], [], c='blue', label='Estaciones')  # Placeholder
     plt.plot([], [], color='black', linestyle='dashed', label='Transbordos')
 
@@ -132,19 +148,30 @@ def dibujar_grafo(G, pos):
         plt.plot([], [], color=linea_colores[codigo], linewidth=3, label=nombre)
 
     plt.legend(loc='upper right', fontsize=8)
-    plt.title("Mapa del Metro de Madrid (Grafo por líneas)", fontsize=14)
+    plt.title("Mapa del Metro de Madrid (Grafo ponderado por tiempo)", fontsize=14)
     plt.axis('off')
     plt.tight_layout()
     plt.show()
 
 # === MAIN ===
 
-estaciones, trmos = cargar_datos()
+estaciones, tramos = cargar_datos()
+tiempos_df = cargar_tiempos()
+
 G = crear_grafo(estaciones)
-agregar_tramos(G, trmos)
-nombre_a_codigos = agregar_transbordos(G, estaciones)
-agregar_transbordo_manual(G, nombre_a_codigos, "NOVICIADO", "PLAZA DE ESPAÑA")
+agregar_tramos(G, tramos)
+agregar_tiempos(G, tiempos_df)
+
+nombre_a_codigos = agregar_transbordos(G, estaciones, peso_transbordo=5)
+agregar_transbordo_manual(G, nombre_a_codigos, "NOVICIADO", "PLAZA DE ESPAÑA", peso_transbordo=5)
 agregar_ramal(G, nombre_a_codigos, "OPERA", "PRINCIPE PIO")
+
 pos = obtener_posiciones(G)
 asignar_color_nodos(G)
 dibujar_grafo(G, pos)
+
+# Ver tiempos de viaje entre algunas estaciones
+for u, v, d in G.edges(data=True):
+    if not d['transbordo']:
+        print(f"{G.nodes[u]['nombre']} - {G.nodes[v]['nombre']}: {d['weight']} min")
+        #break  # quita el break si quieres ver más
