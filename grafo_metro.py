@@ -67,12 +67,24 @@ def agregar_tiempos(G, tiempos_df):
     for _, row in tiempos_df.iterrows():
         origen = str(row['stop_id']).strip().upper()
         destino = str(row['siguiente_stop_id']).strip().upper()
-        tiempo = row['tiempo_entre_estaciones']
+        
+        # Intentamos convertir el tiempo de HH:MM:SS a segundos
+        try:
+            # Convertir el tiempo en formato HH:MM:SS a segundos
+            tiempo_str = row['tiempo_entre_estaciones']
+            horas, minutos, segundos = map(int, tiempo_str.split(':'))
+            tiempo = horas * 3600 + minutos * 60 + segundos  # Convertimos todo a segundos
+        except ValueError:
+            print(f"⚠️ Tiempo inválido entre {origen} y {destino}: {row['tiempo_entre_estaciones']}")
+            continue
+
         if G.has_node(origen) and G.has_node(destino):
             if G.has_edge(origen, destino):
                 G[origen][destino]['tiempo'] = tiempo
             else:
                 G.add_edge(origen, destino, transbordo=False, linea=None, color='gray', tiempo=tiempo)
+
+
 
 def agregar_transbordos(G, estaciones):
     estaciones['CODIGOESTACION'] = estaciones['CODIGOESTACION'].astype(str).str.strip().str.upper()
@@ -113,6 +125,50 @@ def asignar_color_nodos(G):
         lineas_conectadas.discard(None)
         G.nodes[node]['color'] = LINEA_COLORES.get(list(lineas_conectadas)[0], '#444444') if len(lineas_conectadas) == 1 else '#444444'
 
+def calcular_camino_mas_corto(G, nombre_a_codigos, origen_nombre, destino_nombre):
+    origenes = nombre_a_codigos.get(origen_nombre.upper())
+    destinos = nombre_a_codigos.get(destino_nombre.upper())
+
+    if not origenes:
+        print(f"❌ No se encontró la estación de origen: {origen_nombre}")
+        return
+    if not destinos:
+        print(f"❌ No se encontró la estación de destino: {destino_nombre}")
+        return
+
+    mejor_camino = None
+    mejor_tiempo = float('inf')
+
+    for o in origenes:
+        for d in destinos:
+            try:
+                camino = nx.dijkstra_path(G, o, d, weight='tiempo')
+                tiempo = nx.dijkstra_path_length(G, o, d, weight='tiempo')
+                if tiempo < mejor_tiempo:
+                    mejor_camino = camino
+                    mejor_tiempo = tiempo
+            except nx.NetworkXNoPath:
+                continue
+
+    if mejor_camino:
+        print(f"\n✅ Camino más corto en tiempo entre {origen_nombre} y {destino_nombre}:")
+        tiempo_acumulado = 0
+        for i, codigo in enumerate(mejor_camino):
+            nombre_estacion = G.nodes[codigo].get('nombre', '???')
+            print(f" - {codigo}: {nombre_estacion}")
+            if i < len(mejor_camino) - 1:
+                tiempo_tramo = G[codigo][mejor_camino[i + 1]].get('tiempo', 0)
+                tiempo_acumulado += tiempo_tramo
+                print(f"   ⏱️ +{tiempo_tramo} s → Total: {tiempo_acumulado} s")
+
+        minutos = mejor_tiempo // 60
+        segundos = int(mejor_tiempo % 60)
+        print(f"\n🕒 Tiempo total estimado: {int(minutos)} min {segundos} s")
+    else:
+        print(f"⚠️ No se encontró un camino entre {origen_nombre} y {destino_nombre}")
+
+
+
 # === FUNCIONES DE DIBUJO DEL GRAFO ===
 
 def dibujar_grafo(G, pos, mostrar_tiempos=False):
@@ -140,7 +196,7 @@ def dibujar_grafo(G, pos, mostrar_tiempos=False):
     # Mostrar tiempos
     if mostrar_tiempos:
         edge_labels = {
-            (u, v): f"{d['tiempo']} min"
+            (u, v): f"{d['tiempo']} s"
             for u, v, d in G.edges(data=True)
             if 'tiempo' in d
         }
@@ -171,9 +227,20 @@ def main():
     pos = obtener_posiciones(G)
     asignar_color_nodos(G)
 
-    # Preguntar al usuario si quiere mostrar los tiempos en el grafo
     mostrar_tiempos = input("¿Deseas mostrar los tiempos en el grafo? (s/n): ").strip().lower() == 's'
     dibujar_grafo(G, pos, mostrar_tiempos)
+
+    print("\n=== Cálculo de ruta más corta ===")
+    while True:
+        origen_usuario = input("Estación de origen: ")
+        destino_usuario = input("Estación de destino: ")
+        calcular_camino_mas_corto(G, nombre_a_codigos, origen_usuario, destino_usuario)
+
+        continuar = input("\n¿Quieres calcular otro viaje? (s/n): ").strip().lower()
+        if continuar != 's':
+            print("👋 ¡Hasta luego! Gracias por usar el sistema.")
+            break
+
 
 if __name__ == "__main__":
     main()
