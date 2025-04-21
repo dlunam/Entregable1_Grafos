@@ -18,6 +18,8 @@ def calcular_tiempo_en_estacion(df):
         print(problema[['trip_id', 'stop_sequence', 'stop_id', 'arrival_time', 'departure_time']])
     
     df['tiempo_en_estacion'] = df['departure_time'] - df['arrival_time']
+    df['tiempo_en_estacion'] = df['tiempo_en_estacion'].apply(lambda x: str(x).split()[-1])
+    
     df_estaciones = df[['trip_id', 'stop_sequence', 'stop_id', 'arrival_time', 'departure_time', 'tiempo_en_estacion']]
     return df_estaciones
 
@@ -29,9 +31,10 @@ def calcular_tiempo_entre_estaciones(df):
     
     df_tramos = df[['trip_id', 'stop_sequence', 'stop_id', 'siguiente_stop_id', 'departure_time', 'tiempo_entre_estaciones']]
     
-    # 🔥 Normalizamos los IDs (quitamos "par_4_")
     df_tramos['stop_id'] = df_tramos['stop_id'].str.replace('par_4_', '', regex=False)
     df_tramos['siguiente_stop_id'] = df_tramos['siguiente_stop_id'].str.replace('par_4_', '', regex=False)
+    
+    df_tramos['tiempo_entre_estaciones'] = df_tramos['tiempo_entre_estaciones'].apply(lambda x: str(x).split()[-1])
     
     return df_tramos[df_tramos['siguiente_stop_id'].notnull()]
 
@@ -43,8 +46,10 @@ def mostrar_muestra(df_estaciones, df_tramos):
     print(df_tramos.sample(n=5))
 
 def guardar_archivos(df_estaciones, df_tramos):
-    if df_estaciones['tiempo_en_estacion'].eq('0 days').all():
-        print("\n⚠️ El archivo 'tiempos_en_estaciones.csv' no se guardará porque todos los tiempos son 0 días.")
+    tiempos_raw = pd.to_timedelta(df_estaciones['tiempo_en_estacion'])
+    
+    if tiempos_raw.dt.total_seconds().eq(0).all():
+        print("\n⚠️ El archivo 'tiempos_en_estaciones.csv' no se guardará porque todos los tiempos son 0 segundos.")
     else:
         df_estaciones.to_csv("tiempos_en_estaciones.csv", index=False)
         print("✅ Archivo 'tiempos_en_estaciones.csv' guardado.")
