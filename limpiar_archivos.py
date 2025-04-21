@@ -27,7 +27,7 @@ tramos_filtrado['NUMEROLINEAUSUARIO'] = tramos_filtrado['NUMEROLINEAUSUARIO'].ap
 estaciones_filtrado.to_file("Estaciones_filtrado.geojson", driver='GeoJSON')
 tramos_filtrado.to_file("Tramos_filtrado.geojson", driver='GeoJSON')
 
-print("✅ Archivos guardados:\n - Estaciones_filtrado.geojson\n - Tramos_filtrado.geojson\n - Paradas_filtrado.geojson")
+print("✅ Archivos guardados:\n - Estaciones_filtrado.geojson\n - Tramos_filtrado.geojson")
 
 # ------------------------------
 # Verificación: leer y mostrar columnas y tipos
