@@ -92,14 +92,14 @@ def agregar_transbordos(G, estaciones):
     for codigos in nombre_a_codigos:
         for origen, destino in combinations(codigos, 2):
             if G.has_node(origen) and G.has_node(destino):
-               G.add_edge(origen, destino, transbordo=True, tiempo=4)
+               G.add_edge(origen, destino, transbordo=True, tiempo=240)
     return nombre_a_codigos
 
 def agregar_transbordo_manual(G, nombre_a_codigos, origen_nom, destino_nom):
     for origen in nombre_a_codigos.get(origen_nom.upper(), []):
         for destino in nombre_a_codigos.get(destino_nom.upper(), []):
             if G.has_node(origen) and G.has_node(destino):
-               G.add_edge(origen, destino, transbordo=True, tiempo=4)
+               G.add_edge(origen, destino, transbordo=True, tiempo=240)
 
 def agregar_ramal(G, nombre_a_codigos, origen_nom, destino_nom):
     def solo_transbordos(nodo):
