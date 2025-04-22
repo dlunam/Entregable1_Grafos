@@ -3,7 +3,6 @@ import pandas as pd
 import networkx as nx
 import matplotlib.pyplot as plt
 from itertools import combinations
-import heapq
 
 # === COLORES Y METADATOS DE LÍNEAS ===
 
@@ -126,6 +125,7 @@ def asignar_color_nodos(G):
         lineas_conectadas.discard(None)
         G.nodes[node]['color'] = LINEA_COLORES.get(list(lineas_conectadas)[0], '#444444') if len(lineas_conectadas) == 1 else '#444444'
 
+import heapq
 
 def calcular_multiples_caminos(G, nombre_a_codigos, origen_nombre, destino_nombre, cantidad=3):
     origenes = nombre_a_codigos.get(origen_nombre.upper())
@@ -176,7 +176,6 @@ def calcular_multiples_caminos(G, nombre_a_codigos, origen_nombre, destino_nombr
                     print(f"   ⏱️ +{tramo_tiempo} s → Total: {tiempo_acumulado} s")
     else:
         print(f"⚠️ No se encontró ningún camino entre {origen_nombre} y {destino_nombre}")
-
 
 
 # === FUNCIONES DE DIBUJO DEL GRAFO ===
@@ -245,6 +244,7 @@ def main():
         origen_usuario = input("Estación de origen: ")
         destino_usuario = input("Estación de destino: ")
         calcular_multiples_caminos(G, nombre_a_codigos, origen_usuario, destino_usuario)
+
 
         continuar = input("\n¿Quieres calcular otro viaje? (s/n): ").strip().lower()
         if continuar != 's':
